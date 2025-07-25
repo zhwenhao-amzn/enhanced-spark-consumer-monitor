@@ -1,0 +1,7 @@
+# Core dependencies for Spark checkpoint offset to MSK commit
+kafka-python==2.0.2
+boto3>=1.26.0
+botocore>=1.29.0
+
+# Additional utilities
+typing-extensions>=4.0.0

@@ -1,0 +1,10 @@
+{
+  "msk_broker_string": "b-1.zhwenhao.rht9ue.c4.kafka.us-east-1.amazonaws.com:9092",
+  "s3_checkpoint_paths": ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"],
+  "kafka_topics": ["stockprice"],
+  "checkpoint_consumer_group_mapping": {
+    "s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"
+  },
+  "aws_region": "us-east-1",
+  "kafka_consumer_group": "stockprice-monitor"
+}
