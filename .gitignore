@@ -65,3 +65,9 @@ test_*.py
 # Temporary files
 *.tmp
 *.temp
+
+# Project specific files to ignore
+20250725.json
+20250725.sjon
+task.md
+task-*.md
