@@ -231,30 +231,120 @@ max_active_runs = 1
    - Verify task execution logs
    - Monitor CloudWatch metrics
 
-## Monitoring and Troubleshooting
+## Monitoring System Performance
 
-### Key Metrics to Monitor
-- **DAG Success Rate**: Percentage of successful executions
-- **Execution Duration**: Time taken for each DAG run
-- **Offset Commit Success**: Number of successful offset commits
-- **Error Rates**: Failed tasks and retry patterns
+After successful deployment, you can monitor the system's performance and Spark Streaming job health using multiple approaches:
 
-### Common Issues and Solutions
+### 1. Kafka Consumer Group Monitoring
 
-#### Connection Issues
-- **MSK Connectivity**: Verify security groups and network ACLs
-- **S3 Access**: Check IAM permissions and bucket policies
-- **DNS Resolution**: Ensure MSK broker hostnames resolve correctly
+Use the Kafka consumer group tools to check consumer lag and offset positions:
 
-#### Data Issues
-- **Checkpoint Format**: Verify 3-line format compliance
-- **Offset Values**: Check for valid integer offset values
-- **Topic Existence**: Ensure topics exist in MSK cluster
+```bash
+# List all consumer groups
+kafka-consumer-groups.sh --bootstrap-server your-msk-broker:9092 --list
 
-#### Performance Issues
-- **Execution Frequency**: Consider reducing from 1-minute intervals if needed
-- **Batch Size**: Optimize number of topics processed per run
-- **Resource Allocation**: Scale MWAA environment if necessary
+# Check specific consumer group lag
+kafka-consumer-groups.sh --bootstrap-server your-msk-broker:9092 \
+  --group stockprice-monitor --describe
+
+# Monitor consumer group in real-time
+watch -n 5 "kafka-consumer-groups.sh --bootstrap-server your-msk-broker:9092 \
+  --group stockprice-monitor --describe"
+```
+
+This will show you:
+- **Current Offset**: Latest committed offset for each partition
+- **Log End Offset**: Latest available offset in the topic
+- **Lag**: Difference between log end offset and current offset
+- **Consumer ID**: Which consumer instance is handling each partition
+
+![Consumer Group Monitoring](pic/consumer-group.png)
+
+### 2. MSK Consumer Lag Metrics
+
+Monitor Spark Streaming application health through Amazon MSK CloudWatch metrics:
+
+#### Key Metrics to Track:
+- **`kafka.consumer.lag`**: Consumer lag per partition
+- **`kafka.consumer.lag.sum`**: Total lag across all partitions
+- **`kafka.consumer.records.consumed.rate`**: Message consumption rate
+- **`kafka.consumer.fetch.rate`**: Fetch request rate
+
+#### CloudWatch Dashboard Setup:
+```json
+{
+  "metrics": [
+    ["AWS/Kafka", "ConsumerLag", "Consumer Group", "stockprice-monitor", "Topic", "stockprice"],
+    ["AWS/Kafka", "RecordsConsumedRate", "Consumer Group", "stockprice-monitor"],
+    ["AWS/Kafka", "FetchRate", "Consumer Group", "stockprice-monitor"]
+  ]
+}
+```
+
+![MSK Consumer Lag Metrics](pic/consumer-lag-metrics.png)
+
+### 3. Spark Streaming Health Indicators
+
+Monitor these patterns to assess Spark Streaming job health:
+
+#### Healthy Streaming Job:
+- **Low Consumer Lag**: Lag remains consistently low (< 1000 messages)
+- **Steady Consumption Rate**: Regular message processing without spikes
+- **Consistent Offset Commits**: Regular offset updates every 1-2 minutes
+
+#### Warning Signs:
+- **Increasing Lag**: Consumer lag trending upward over time
+- **Stalled Offsets**: No offset commits for extended periods (> 5 minutes)
+- **Irregular Consumption**: Sporadic or declining consumption rates
+
+#### Critical Issues:
+- **High Lag**: Consumer lag > 10,000 messages
+- **No Consumption**: Zero consumption rate for > 10 minutes
+- **Offset Rollback**: Current offset decreasing (potential reprocessing)
+
+### 4. Automated Alerting
+
+Set up CloudWatch alarms for proactive monitoring:
+
+```bash
+# Create alarm for high consumer lag
+aws cloudwatch put-metric-alarm \
+  --alarm-name "SparkStreaming-HighConsumerLag" \
+  --alarm-description "Alert when consumer lag exceeds threshold" \
+  --metric-name ConsumerLag \
+  --namespace AWS/Kafka \
+  --statistic Average \
+  --period 300 \
+  --threshold 5000 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2
+
+# Create alarm for stalled consumption
+aws cloudwatch put-metric-alarm \
+  --alarm-name "SparkStreaming-StalledConsumption" \
+  --alarm-description "Alert when no records consumed" \
+  --metric-name RecordsConsumedRate \
+  --namespace AWS/Kafka \
+  --statistic Sum \
+  --period 600 \
+  --threshold 1 \
+  --comparison-operator LessThanThreshold \
+  --evaluation-periods 1
+```
+
+### 5. Integration with Spark Streaming UI
+
+Access the Spark Streaming UI to correlate with Kafka metrics:
+- **Streaming Tab**: Batch processing times and input rates
+- **SQL Tab**: Query execution plans and performance
+- **Storage Tab**: Cached data and memory usage
+- **Executors Tab**: Resource utilization across cluster
+
+This comprehensive monitoring approach ensures you can:
+- **Detect Issues Early**: Identify problems before they impact downstream systems
+- **Optimize Performance**: Tune batch intervals and resource allocation
+- **Ensure Data Freshness**: Maintain low-latency data processing
+- **Plan Capacity**: Scale resources based on consumption patterns
 
 ## Technical Specifications
 
