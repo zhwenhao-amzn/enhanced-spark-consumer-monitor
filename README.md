@@ -332,20 +332,6 @@ aws cloudwatch put-metric-alarm \
   --evaluation-periods 1
 ```
 
-### 5. Integration with Spark Streaming UI
-
-Access the Spark Streaming UI to correlate with Kafka metrics:
-- **Streaming Tab**: Batch processing times and input rates
-- **SQL Tab**: Query execution plans and performance
-- **Storage Tab**: Cached data and memory usage
-- **Executors Tab**: Resource utilization across cluster
-
-This comprehensive monitoring approach ensures you can:
-- **Detect Issues Early**: Identify problems before they impact downstream systems
-- **Optimize Performance**: Tune batch intervals and resource allocation
-- **Ensure Data Freshness**: Maintain low-latency data processing
-- **Plan Capacity**: Scale resources based on consumption patterns
-
 ## Technical Specifications
 
 - **Target Platform**: Amazon MWAA 2.10.3
