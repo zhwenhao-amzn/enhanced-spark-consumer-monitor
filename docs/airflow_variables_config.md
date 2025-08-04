@@ -139,36 +139,6 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
   300
   ```
 
-## Variable Configuration Methods
-
-### Method 1: Airflow Web UI (Recommended)
-
-1. **Access Airflow Web UI**: 
-   ```
-   https://your-mwaa-environment.airflow.amazonaws.com
-   ```
-
-2. **Navigate to Variables**:
-   - Go to `Admin` → `Variables`
-
-3. **Add Each Variable**:
-   - Click `+` (Add a new record)
-   - Enter `Key` and `Val` exactly as specified
-   - Click `Save`
-
-### Method 2: Airflow CLI
-
-```bash
-# Create CLI token
-TOKEN=$(aws mwaa create-cli-token --name your-environment --region us-east-1 --query 'CliToken' --output text)
-
-# Set a variable
-curl -X POST "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: text/plain" \
-  -d "variables set kafka_topics stockprice"
-```
-
 ## Variable Format Guidelines
 
 ### String Variables
@@ -189,6 +159,83 @@ curl -X POST "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
 ### Numeric Variables
 - Enter as plain numbers without quotes
 - Use integers for counts and timeouts
+
+## Configuration Examples
+
+### Example 1: Single Topic Configuration
+
+```
+# Core Configuration
+msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
+s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
+kafka_topics = stockprice
+
+# Consumer Group Mapping
+checkpoint_consumer_group_mapping = {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
+kafka_consumer_group_mapping = {"stockprice": "stockprice-monitor"}
+kafka_consumer_group = stockprice-monitor
+
+# IAM Authentication
+msk_use_iam_auth = true
+aws_region = us-east-1
+
+# Processing Configuration (Optional)
+max_retries = 3
+retry_delay_seconds = 60
+timeout_seconds = 300
+```
+
+### Example 2: Multiple Topics Configuration
+
+```
+# Core Configuration
+msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9098,b-1.cluster.kafka.us-east-1.amazonaws.com:9098
+s3_checkpoint_paths = ["s3://data-lake/checkpoints/stockprice/", "s3://data-lake/checkpoints/orderdata/"]
+kafka_topics = stockprice,orderdata
+
+# Consumer Group Mapping
+checkpoint_consumer_group_mapping = {"s3://data-lake/checkpoints/stockprice/": "stock-monitor", "s3://data-lake/checkpoints/orderdata/": "order-monitor"}
+kafka_consumer_group_mapping = {"stockprice": "stock-monitor", "orderdata": "order-monitor"}
+
+# IAM Authentication
+msk_use_iam_auth = true
+aws_region = us-east-1
+```
+
+### Example 3: JSON Array Topics Configuration
+
+```
+# Core Configuration
+msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9098,b-1.cluster.kafka.us-east-1.amazonaws.com:9098
+s3_checkpoint_paths = ["s3://analytics/spark-checkpoints/topic1/", "s3://analytics/spark-checkpoints/topic2/"]
+kafka_topics = ["topic1", "topic2", "topic3"]
+
+# Consumer Group Mapping
+checkpoint_consumer_group_mapping = {"s3://analytics/spark-checkpoints/topic1/": "analytics-group", "s3://analytics/spark-checkpoints/topic2/": "analytics-group"}
+kafka_consumer_group_mapping = {"topic1": "analytics-group", "topic2": "analytics-group", "topic3": "analytics-group"}
+kafka_consumer_group = analytics-group
+
+# IAM Authentication
+msk_use_iam_auth = true
+aws_region = us-west-2
+```
+
+### Example 4: Non-IAM Configuration
+
+```
+# Core Configuration (SASL/PLAINTEXT)
+msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9092,b-1.cluster.kafka.us-east-1.amazonaws.com:9092
+s3_checkpoint_paths = ["s3://legacy-data/checkpoints/events/"]
+kafka_topics = events
+
+# Consumer Group Mapping
+checkpoint_consumer_group_mapping = {"s3://legacy-data/checkpoints/events/": "events-processor"}
+kafka_consumer_group = events-processor
+
+# No IAM Authentication
+msk_use_iam_auth = false
+aws_region = us-east-1
+```
 
 ## Configuration Validation
 
@@ -241,29 +288,6 @@ aws mwaa create-cli-token --name your-environment --region us-east-1 | \
   "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
   -H "Authorization: Bearer {}" -H "Content-Type: text/plain" \
   -d "variables get kafka_topics"
-```
-
-## Example Complete Configuration
-
-```
-# Core Configuration
-msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
-s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
-kafka_topics = stockprice
-
-# Consumer Group Mapping
-checkpoint_consumer_group_mapping = {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
-kafka_consumer_group_mapping = {"stockprice": "stockprice-monitor"}
-kafka_consumer_group = stockprice-monitor
-
-# IAM Authentication
-msk_use_iam_auth = true
-aws_region = us-east-1
-
-# Processing Configuration (Optional)
-max_retries = 3
-retry_delay_seconds = 60
-timeout_seconds = 300
 ```
 
 ## Security Considerations
