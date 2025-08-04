@@ -418,7 +418,8 @@ class ConfigManager:
                 'checkpoint_consumer_group_mapping': self.get_checkpoint_consumer_group_mapping(),
                 'consumer_groups': self.get_consumer_groups(),
                 'aws_region': self.get_aws_region(),
-                'processing': self.get_processing_config()
+                'processing': self.get_processing_config(),
+                'iam_auth': self.get_iam_auth_config()
             }
             
             return config
@@ -426,6 +427,58 @@ class ConfigManager:
         except Exception as e:
             self.logger.error(f"Failed to get complete configuration: {e}")
             raise
+    
+    def get_iam_auth_config(self) -> Dict[str, Any]:
+        """
+        Get IAM authentication configuration from Airflow Variables.
+        
+        Returns:
+            Dictionary containing IAM authentication settings
+        """
+        try:
+            # Check if IAM authentication is enabled
+            use_iam_auth = self.get_variable(
+                key='msk_use_iam_auth',
+                default_value=False,
+                deserialize_json=True
+            )
+            
+            # Get AWS region for IAM authentication
+            aws_region = self.get_aws_region()
+            
+            # Get IAM role ARN if specified
+            iam_role_arn = self.get_variable(
+                key='msk_iam_role_arn',
+                default_value=None
+            )
+            
+            config = {
+                'enabled': bool(use_iam_auth),
+                'aws_region': aws_region,
+                'role_arn': iam_role_arn
+            }
+            
+            self.logger.info(f"IAM authentication config: enabled={config['enabled']}, region={config['aws_region']}")
+            
+            return config
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get IAM authentication configuration: {e}")
+            # Return default configuration (IAM disabled)
+            return {
+                'enabled': False,
+                'aws_region': self.get_aws_region(),
+                'role_arn': None
+            }
+    
+    def is_iam_auth_enabled(self) -> bool:
+        """
+        Check if IAM authentication is enabled.
+        
+        Returns:
+            True if IAM authentication is enabled, False otherwise
+        """
+        return self.get_iam_auth_config()['enabled']
     
     def clear_cache(self):
         """Clear configuration cache."""

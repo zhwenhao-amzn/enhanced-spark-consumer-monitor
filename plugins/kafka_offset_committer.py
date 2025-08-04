@@ -2,13 +2,56 @@
 Kafka Offset Committer Module
 
 This module handles committing offset information to MSK (Kafka) topics.
-It supports multiple topics and provides robust error handling.
+It supports multiple topics, IAM authentication, and provides robust error handling.
 """
 
 import logging
+import socket
 from typing import Dict, List, Optional
 from kafka import KafkaConsumer, TopicPartition, OffsetAndMetadata
 from kafka.errors import KafkaError, KafkaTimeoutError, NoBrokersAvailable
+
+# IAM authentication imports
+try:
+    from aws_msk_iam_sasl_signer import MSKAuthTokenProvider
+    IAM_AUTH_AVAILABLE = True
+except ImportError:
+    IAM_AUTH_AVAILABLE = False
+    MSKAuthTokenProvider = None
+
+
+class MSKTokenProvider:
+    """
+    Token provider for MSK IAM authentication using SASL_OAUTHBEARER mechanism.
+    """
+    
+    def __init__(self, region: str):
+        """
+        Initialize MSK token provider.
+        
+        Args:
+            region: AWS region where MSK cluster is located
+        """
+        if not IAM_AUTH_AVAILABLE:
+            raise ImportError("aws-msk-iam-sasl-signer-python is required for IAM authentication")
+        
+        self.region = region
+        self.logger = logging.getLogger(__name__)
+    
+    def token(self):
+        """
+        Generate MSK IAM authentication token.
+        
+        Returns:
+            Authentication token for MSK IAM access
+        """
+        try:
+            token, _ = MSKAuthTokenProvider.generate_auth_token(self.region)
+            self.logger.debug("Successfully generated MSK IAM auth token")
+            return token
+        except Exception as e:
+            self.logger.error(f"Failed to generate MSK IAM auth token: {e}")
+            raise
 
 
 class MultiConsumerGroupKafkaCommitter:
@@ -19,18 +62,27 @@ class MultiConsumerGroupKafkaCommitter:
     management of multiple KafkaOffsetCommitter instances.
     """
     
-    def __init__(self, bootstrap_servers: str, consumer_group_mapping: Dict[str, str]):
+    def __init__(self, bootstrap_servers: str, consumer_group_mapping: Dict[str, str],
+                 use_iam_auth: bool = False, aws_region: str = None):
         """
         Initialize multi-consumer group committer.
         
         Args:
             bootstrap_servers: Comma-separated list of Kafka broker addresses
             consumer_group_mapping: Dictionary mapping topic -> consumer_group
+            use_iam_auth: Whether to use IAM authentication for MSK
+            aws_region: AWS region for IAM authentication (required if use_iam_auth=True)
         """
         self.logger = logging.getLogger(__name__)
         self.bootstrap_servers = bootstrap_servers
         self.consumer_group_mapping = consumer_group_mapping
+        self.use_iam_auth = use_iam_auth
+        self.aws_region = aws_region
         self.committers = {}  # consumer_group -> KafkaOffsetCommitter
+        
+        # Validate IAM authentication requirements
+        if self.use_iam_auth and not self.aws_region:
+            raise ValueError("aws_region is required when use_iam_auth=True")
         
         # Group topics by consumer group
         self.group_topics = {}  # consumer_group -> [topics]
@@ -39,7 +91,8 @@ class MultiConsumerGroupKafkaCommitter:
                 self.group_topics[group] = []
             self.group_topics[group].append(topic)
         
-        self.logger.info(f"Initialized multi-consumer group committer for {len(self.group_topics)} groups")
+        auth_method = "IAM" if self.use_iam_auth else "Standard"
+        self.logger.info(f"Initialized multi-consumer group committer for {len(self.group_topics)} groups using {auth_method} authentication")
         for group, topics in self.group_topics.items():
             self.logger.info(f"  Group '{group}': {topics}")
     
@@ -56,13 +109,16 @@ class MultiConsumerGroupKafkaCommitter:
             try:
                 committer = KafkaOffsetCommitter(
                     bootstrap_servers=self.bootstrap_servers,
-                    consumer_group=consumer_group
+                    consumer_group=consumer_group,
+                    use_iam_auth=self.use_iam_auth,
+                    aws_region=self.aws_region
                 )
                 
                 if committer.connect():
                     self.committers[consumer_group] = committer
                     connection_results[consumer_group] = True
-                    self.logger.info(f"Connected consumer group: {consumer_group}")
+                    auth_method = "IAM" if self.use_iam_auth else "Standard"
+                    self.logger.info(f"Connected consumer group: {consumer_group} using {auth_method} authentication")
                 else:
                     connection_results[consumer_group] = False
                     self.logger.error(f"Failed to connect consumer group: {consumer_group}")
@@ -217,18 +273,32 @@ class KafkaOffsetCommitter:
     proper error handling for MSK environments.
     """
     
-    def __init__(self, bootstrap_servers: str, consumer_group: str = 'spark-checkpoint-monitor'):
+    def __init__(self, bootstrap_servers: str, consumer_group: str = 'spark-checkpoint-monitor',
+                 use_iam_auth: bool = False, aws_region: str = None):
         """
         Initialize Kafka offset committer.
         
         Args:
             bootstrap_servers: Comma-separated list of Kafka broker addresses
             consumer_group: Consumer group ID for offset commits
+            use_iam_auth: Whether to use IAM authentication for MSK
+            aws_region: AWS region for IAM authentication (required if use_iam_auth=True)
         """
         self.logger = logging.getLogger(__name__)
         self.bootstrap_servers = bootstrap_servers.split(',')
         self.consumer_group = consumer_group
         self.consumer = None
+        self.use_iam_auth = use_iam_auth
+        self.aws_region = aws_region
+        
+        # Validate IAM authentication requirements
+        if self.use_iam_auth:
+            if not IAM_AUTH_AVAILABLE:
+                raise ImportError("aws-msk-iam-sasl-signer-python is required for IAM authentication")
+            if not self.aws_region:
+                raise ValueError("aws_region is required when use_iam_auth=True")
+            
+            self.logger.info(f"IAM authentication enabled for region: {self.aws_region}")
         
         # Kafka consumer configuration optimized for MSK
         self.consumer_config = {
@@ -245,6 +315,19 @@ class KafkaOffsetCommitter:
             'reconnect_backoff_ms': 50,
             'reconnect_backoff_max_ms': 1000,
         }
+        
+        # Add IAM authentication configuration if enabled
+        if self.use_iam_auth:
+            self.token_provider = MSKTokenProvider(self.aws_region)
+            self.consumer_config.update({
+                'security_protocol': 'SASL_SSL',
+                'sasl_mechanism': 'OAUTHBEARER',
+                'sasl_oauth_token_provider': self.token_provider,
+                'client_id': socket.gethostname(),
+            })
+            self.logger.info("Configured Kafka consumer for IAM authentication")
+        else:
+            self.logger.info("Using standard Kafka authentication (no IAM)")
     
     def connect(self) -> bool:
         """
@@ -452,14 +535,22 @@ class KafkaOffsetCommitter:
                 
                 topic_offsets = {}
                 for tp in topic_partitions:
-                    # Handle case where committed() returns None
+                    # Handle case where committed() returns None or OffsetAndMetadata
                     if committed is not None:
-                        offset = committed.get(tp)
-                        if offset is not None:
-                            # Convert back to actual offset (subtract 1 from next offset)
-                            topic_offsets[tp.partition] = max(0, offset - 1)
+                        if isinstance(committed, dict):
+                            # committed is a dictionary mapping TopicPartition -> OffsetAndMetadata
+                            offset_metadata = committed.get(tp)
+                            if offset_metadata is not None and hasattr(offset_metadata, 'offset'):
+                                # Convert back to actual offset (subtract 1 from next offset)
+                                topic_offsets[tp.partition] = max(0, offset_metadata.offset - 1)
+                            else:
+                                topic_offsets[tp.partition] = 0
                         else:
-                            topic_offsets[tp.partition] = 0
+                            # committed might be a single OffsetAndMetadata object
+                            if hasattr(committed, 'offset'):
+                                topic_offsets[tp.partition] = max(0, committed.offset - 1)
+                            else:
+                                topic_offsets[tp.partition] = 0
                     else:
                         # No committed offsets exist for this consumer group yet
                         topic_offsets[tp.partition] = 0

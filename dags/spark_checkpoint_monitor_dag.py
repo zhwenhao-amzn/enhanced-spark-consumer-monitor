@@ -197,10 +197,21 @@ def commit_offsets_to_kafka(**context) -> Dict[str, Any]:
                 'resolved_consumer_group_mapping': resolved_consumer_group_mapping
             }
         
+        # Get IAM authentication configuration
+        iam_config = config.get('iam_auth', {})
+        use_iam_auth = iam_config.get('enabled', False)
+        aws_region = iam_config.get('aws_region', config.get('aws_region'))
+        
+        logger.info(f"Using IAM authentication: {use_iam_auth}")
+        if use_iam_auth:
+            logger.info(f"IAM authentication region: {aws_region}")
+        
         # Initialize Multi-Consumer Group Kafka committer with resolved mapping
         with MultiConsumerGroupKafkaCommitter(
             bootstrap_servers=config['msk_broker_string'],
-            consumer_group_mapping=resolved_consumer_group_mapping
+            consumer_group_mapping=resolved_consumer_group_mapping,
+            use_iam_auth=use_iam_auth,
+            aws_region=aws_region
         ) as multi_committer:
             
             # Get current offsets for comparison
