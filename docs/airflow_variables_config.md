@@ -1,235 +1,281 @@
-# Airflow Variables Configuration
+# Airflow Variables Configuration Guide
 
-This document provides the required Airflow Variables configuration for the Spark Checkpoint Monitor DAG.
+This document provides the complete configuration guide for Airflow Variables required by the Enhanced Spark Consumer Monitor system.
+
+## Overview
+
+The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configuration management. All variables are read through the `ConfigManager` class in `plugins/config_manager.py`.
 
 ## Required Variables
 
-### 1. MSK Broker String
-**Variable Key:** `msk_broker_string`  
-**Type:** String  
-**Description:** Comma-separated list of MSK broker addresses  
-**Example:**
-```
-b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092
-```
+### Core Configuration Variables
 
-### 2. S3 Checkpoint Paths
-**Variable Key:** `s3_checkpoint_paths`  
-**Type:** JSON Array or Comma-separated String  
-**Description:** List of S3 paths containing Spark streaming checkpoints  
+#### `msk_broker_string` (Required)
+- **Type**: String (comma-separated)
+- **Description**: MSK broker endpoints for Kafka connection
+- **Format**: `host1:port,host2:port`
+- **Example**: 
+  ```
+  b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
+  ```
+- **Notes**: Use port 9098 for IAM authentication, 9092 for SASL/PLAINTEXT
 
-**JSON Format (Recommended):**
-```json
-[
-  "s3://zhwenhaodatalake/checkpoints/stockprice/offsets/",
-  "s3://zhwenhaodatalake/checkpoints/userdata/offsets/",
-  "s3://zhwenhaodatalake/checkpoints/transactions/offsets/"
-]
-```
+#### `s3_checkpoint_paths` (Required)
+- **Type**: JSON Array
+- **Description**: List of S3 paths containing Spark checkpoint data
+- **Format**: `["s3://bucket/path1/", "s3://bucket/path2/"]`
+- **Example**:
+  ```json
+  ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
+  ```
+- **Notes**: Each path must start with `s3://` and end with `/`
 
-**String Format (Alternative):**
-```
-s3://zhwenhaodatalake/checkpoints/stockprice/offsets/,s3://zhwenhaodatalake/checkpoints/userdata/offsets/
-```
+#### `kafka_topics` (Required)
+- **Type**: String (comma-separated) or JSON Array
+- **Description**: Kafka topics to monitor and commit offsets for
+- **Format**: `topic1,topic2` or `["topic1", "topic2"]`
+- **Example**: 
+  ```
+  stockprice
+  ```
+- **Notes**: Can be a single topic or multiple topics separated by commas
 
-### 3. Kafka Topics
-**Variable Key:** `kafka_topics`  
-**Type:** JSON Array or Comma-separated String  
-**Description:** List of Kafka topics to commit offsets to  
+### Consumer Group Mapping Variables
 
-**JSON Format (Recommended):**
-```json
-[
-  "stockprice",
-  "userdata",
-  "transactions"
-]
-```
+#### `checkpoint_consumer_group_mapping` (Required)
+- **Type**: JSON Object
+- **Description**: Maps S3 checkpoint paths to Kafka consumer groups
+- **Format**: `{"s3://path/": "consumer-group"}`
+- **Example**:
+  ```json
+  {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
+  ```
+- **Notes**: Each S3 path must match exactly with `s3_checkpoint_paths`
 
-**String Format (Alternative):**
-```
-stockprice,userdata,transactions
-```
+#### `kafka_consumer_group_mapping` (Optional)
+- **Type**: JSON Object
+- **Description**: Maps Kafka topics to consumer groups (fallback mapping)
+- **Format**: `{"topic": "consumer-group"}`
+- **Example**:
+  ```json
+  {"stockprice": "stockprice-monitor"}
+  ```
+- **Notes**: Used when checkpoint-based mapping is not available
 
-## Optional Variables (with defaults)
+#### `kafka_consumer_group` (Optional)
+- **Type**: String
+- **Description**: Default consumer group for all topics (fallback)
+- **Default**: `spark-checkpoint-monitor`
+- **Example**: 
+  ```
+  stockprice-monitor
+  ```
 
-### 4. Checkpoint Consumer Group Mapping (NEW - Advanced Multiple Consumer Groups)
-**Variable Key:** `checkpoint_consumer_group_mapping`  
-**Type:** JSON Object  
-**Description:** Maps each S3 checkpoint path to its specific consumer group (supports same topic with different consumer groups)
+### IAM Authentication Variables
 
-**JSON Format:**
-```json
-{
-  "s3://zhwenhaodatalake/checkpoints/sp1/stockprice/offsets/": "sp1",
-  "s3://zhwenhaodatalake/checkpoints/sp2/stockprice/offsets/": "sp2"
-}
-```
+#### `msk_use_iam_auth` (Optional)
+- **Type**: Boolean (as string)
+- **Description**: Enable/disable IAM authentication for MSK
+- **Default**: `false`
+- **Example**: 
+  ```
+  true
+  ```
+- **Notes**: Set to `true` to enable IAM authentication
 
-**Use Case:** When multiple Spark applications process the same Kafka topic but need separate consumer groups
+#### `aws_region` (Optional)
+- **Type**: String
+- **Description**: AWS region for IAM authentication and other AWS services
+- **Default**: `us-east-1`
+- **Example**: 
+  ```
+  us-east-1
+  ```
 
-### 5. Consumer Group Mapping (Standard Multiple Consumer Groups)
-**Variable Key:** `kafka_consumer_group_mapping`  
-**Type:** JSON Object  
-**Description:** Maps each Kafka topic to its specific consumer group  
+#### `msk_iam_role_arn` (Optional)
+- **Type**: String
+- **Description**: IAM role ARN for MSK authentication (if different from execution role)
+- **Example**: 
+  ```
+  arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
+  ```
+- **Notes**: Usually not needed as MWAA uses execution role by default
 
-**JSON Format:**
-```json
-{
-  "stockprice": "stock-consumer-group",
-  "userdata": "user-consumer-group", 
-  "transactions": "transaction-consumer-group"
-}
-```
+### Processing Configuration Variables
 
-### 6. Kafka Consumer Group (Fallback/Default)
-**Variable Key:** `kafka_consumer_group`  
-**Type:** String  
-**Default:** `spark-checkpoint-monitor`  
-**Description:** Default consumer group ID (used if mapping not provided)  
-**Example:**
-```
-spark-checkpoint-monitor
-```
+#### `max_retries` (Optional)
+- **Type**: Integer
+- **Description**: Maximum number of retries for failed operations
+- **Default**: `3`
+- **Example**: 
+  ```
+  3
+  ```
 
-### 6. AWS Region
-**Variable Key:** `aws_region`  
-**Type:** String  
-**Default:** `us-east-1`  
-**Description:** AWS region for S3 and other AWS services  
-**Example:**
-```
-us-east-1
-```
+#### `retry_delay_seconds` (Optional)
+- **Type**: Integer
+- **Description**: Delay between retries in seconds
+- **Default**: `60`
+- **Example**: 
+  ```
+  60
+  ```
 
-### 6. Processing Configuration
-**Variable Key:** `max_retries`  
-**Type:** String (converted to int)  
-**Default:** `3`  
-**Description:** Maximum number of retries for failed operations  
+#### `batch_size` (Optional)
+- **Type**: Integer
+- **Description**: Batch size for processing operations
+- **Default**: `100`
+- **Example**: 
+  ```
+  100
+  ```
 
-**Variable Key:** `retry_delay_seconds`  
-**Type:** String (converted to int)  
-**Default:** `60`  
-**Description:** Delay between retries in seconds  
+#### `timeout_seconds` (Optional)
+- **Type**: Integer
+- **Description**: Timeout for operations in seconds
+- **Default**: `300`
+- **Example**: 
+  ```
+  300
+  ```
 
-**Variable Key:** `batch_size`  
-**Type:** String (converted to int)  
-**Default:** `100`  
-**Description:** Batch size for processing operations  
+## Variable Configuration Methods
 
-**Variable Key:** `timeout_seconds`  
-**Type:** String (converted to int)  
-**Default:** `300`  
-**Description:** Timeout for operations in seconds  
+### Method 1: Airflow Web UI (Recommended)
 
-## Setting Variables in Airflow
+1. **Access Airflow Web UI**: 
+   ```
+   https://your-mwaa-environment.airflow.amazonaws.com
+   ```
 
-### Method 1: Airflow Web UI
-1. Navigate to Admin → Variables
-2. Click "+" to add a new variable
-3. Enter the Key and Value
-4. For JSON values, ensure proper JSON formatting
+2. **Navigate to Variables**:
+   - Go to `Admin` → `Variables`
+
+3. **Add Each Variable**:
+   - Click `+` (Add a new record)
+   - Enter `Key` and `Val` exactly as specified
+   - Click `Save`
 
 ### Method 2: Airflow CLI
-```bash
-# Set string variables
-airflow variables set msk_broker_string "b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-
-# Set JSON variables
-airflow variables set s3_checkpoint_paths '["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]'
-airflow variables set kafka_topics '["stockprice"]'
-
-# Set consumer group mapping (NEW - Multiple Consumer Groups)
-airflow variables set kafka_consumer_group_mapping '{"stockprice": "spark-stock-monitor"}'
-
-# Set optional variables
-airflow variables set kafka_consumer_group "spark-checkpoint-monitor"
-airflow variables set aws_region "us-east-1"
-```
-
-### Method 3: Environment Variables (MWAA)
-For Amazon MWAA, you can also set these as environment variables with the prefix `AIRFLOW_VAR_`:
 
 ```bash
-AIRFLOW_VAR_MSK_BROKER_STRING="b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-AIRFLOW_VAR_S3_CHECKPOINT_PATHS='["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]'
-AIRFLOW_VAR_KAFKA_TOPICS='["stockprice"]'
-AIRFLOW_VAR_KAFKA_CONSUMER_GROUP_MAPPING='{"stockprice": "spark-stock-monitor"}'
+# Create CLI token
+TOKEN=$(aws mwaa create-cli-token --name your-environment --region us-east-1 --query 'CliToken' --output text)
+
+# Set a variable
+curl -X POST "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: text/plain" \
+  -d "variables set kafka_topics stockprice"
 ```
 
-## Configuration Examples
+## Variable Format Guidelines
 
-### Single Consumer Group (Simple Setup)
-```bash
-# Required variables
-airflow variables set msk_broker_string "b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-airflow variables set s3_checkpoint_paths '["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]'
-airflow variables set kafka_topics '["stockprice"]'
+### String Variables
+- Enter as plain text without quotes
+- No leading/trailing spaces
+- Case-sensitive
 
-# Optional: Set default consumer group (will be used for all topics)
-airflow variables set kafka_consumer_group "spark-checkpoint-monitor"
+### JSON Variables
+- Must use valid JSON syntax
+- Use double quotes `"` not single quotes `'`
+- No trailing commas
+- Validate JSON before saving
+
+### Boolean Variables
+- Enter as string: `true` or `false`
+- Do not use checkbox/boolean input
+
+### Numeric Variables
+- Enter as plain numbers without quotes
+- Use integers for counts and timeouts
+
+## Configuration Validation
+
+The system validates configuration through the `validate_configuration()` method:
+
+```python
+validation_results = config_manager.validate_configuration()
 ```
 
-### Multiple Spark Applications - Same Topic (Advanced Setup)
-**Scenario:** Two Spark applications (sp1, sp2) processing the same topic (stockprice) with different consumer groups
-
-```bash
-# Required variables
-airflow variables set msk_broker_string "b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-
-# Multiple checkpoint paths for different applications
-airflow variables set s3_checkpoint_paths '[
-  "s3://zhwenhaodatalake/checkpoints/sp1/stockprice/offsets/",
-  "s3://zhwenhaodatalake/checkpoints/sp2/stockprice/offsets/"
-]'
-
-airflow variables set kafka_topics '["stockprice"]'
-
-# Checkpoint-based consumer group mapping (NEW - Advanced)
-airflow variables set checkpoint_consumer_group_mapping '{
-  "s3://zhwenhaodatalake/checkpoints/sp1/stockprice/offsets/": "sp1",
-  "s3://zhwenhaodatalake/checkpoints/sp2/stockprice/offsets/": "sp2"
-}'
-```
-
-### Multiple Consumer Groups (Standard Setup)
-```bash
-# Required variables
-airflow variables set msk_broker_string "b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-airflow variables set s3_checkpoint_paths '["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/", "s3://zhwenhaodatalake/checkpoints/userdata/offsets/"]'
-airflow variables set kafka_topics '["stockprice", "userdata", "transactions"]'
-
-# Consumer group mapping (each topic gets its own consumer group)
-airflow variables set kafka_consumer_group_mapping '{
-  "stockprice": "spark-stock-monitor",
-  "userdata": "spark-user-monitor", 
-  "transactions": "spark-transaction-monitor"
-}'
-```
-
-## Minimal Configuration Example
-
-For your specific setup with multiple consumer group support:
-
-```bash
-# Required variables
-airflow variables set msk_broker_string "b-1.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092,b-2.zhwenhaomsk.88je25.c5.kafka.us-east-1.amazonaws.com:9092"
-airflow variables set s3_checkpoint_paths '["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]'
-airflow variables set kafka_topics '["stockprice"]'
-```
-
-## Validation
-
-The DAG includes a configuration validation task that will check all required variables and report any missing or invalid configurations. The validation will fail the DAG run if required variables are not properly configured.
+### Validation Checks:
+- ✅ MSK broker string format and connectivity
+- ✅ S3 checkpoint paths accessibility and format
+- ✅ Kafka topics configuration
+- ✅ Consumer group mappings consistency
+- ✅ IAM authentication settings
 
 ## Troubleshooting
 
-### Common Issues:
-1. **JSON Format Errors**: Ensure JSON arrays are properly formatted with double quotes
-2. **S3 Path Format**: All S3 paths must start with `s3://`
-3. **Broker Format**: Each broker must include port number (e.g., `:9092`)
-4. **Missing Variables**: Required variables must be set, optional ones will use defaults
+### Common Issues
 
-### Testing Configuration:
-You can test the configuration by running the `validate_configuration` task independently or by triggering the full DAG and checking the logs.
+#### "Expecting value: line 1 column 1 (char 0)"
+- **Cause**: Variable is empty or contains only whitespace
+- **Solution**: Ensure variable has a valid value
+
+#### "Extra data: line 1 column X (char Y)"
+- **Cause**: Invalid JSON format
+- **Solution**: Validate JSON syntax, check for trailing commas
+
+#### "Invalid S3 path format"
+- **Cause**: S3 path doesn't start with `s3://`
+- **Solution**: Ensure all S3 paths use correct format
+
+#### "MSK broker string not configured"
+- **Cause**: `msk_broker_string` variable is missing or empty
+- **Solution**: Add valid broker string with host:port format
+
+### Debug Commands
+
+```bash
+# List all variables
+aws mwaa create-cli-token --name your-environment --region us-east-1 | \
+  jq -r '.CliToken' | xargs -I {} curl -X POST \
+  "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
+  -H "Authorization: Bearer {}" -H "Content-Type: text/plain" \
+  -d "variables list"
+
+# Get specific variable
+aws mwaa create-cli-token --name your-environment --region us-east-1 | \
+  jq -r '.CliToken' | xargs -I {} curl -X POST \
+  "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
+  -H "Authorization: Bearer {}" -H "Content-Type: text/plain" \
+  -d "variables get kafka_topics"
+```
+
+## Example Complete Configuration
+
+```
+# Core Configuration
+msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
+s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
+kafka_topics = stockprice
+
+# Consumer Group Mapping
+checkpoint_consumer_group_mapping = {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
+kafka_consumer_group_mapping = {"stockprice": "stockprice-monitor"}
+kafka_consumer_group = stockprice-monitor
+
+# IAM Authentication
+msk_use_iam_auth = true
+aws_region = us-east-1
+
+# Processing Configuration (Optional)
+max_retries = 3
+retry_delay_seconds = 60
+timeout_seconds = 300
+```
+
+## Security Considerations
+
+- **IAM Permissions**: Ensure MWAA execution role has necessary permissions for MSK, S3, and CloudWatch
+- **Network Access**: Verify security groups allow MWAA to access MSK brokers
+- **Encryption**: Use IAM authentication for secure MSK access
+- **Least Privilege**: Grant minimal required permissions
+
+## Related Documentation
+
+- [Enhanced Spark Consumer Monitor README](../README.md)
+- [IAM Authentication Guide](../README-IAM.md)
+- [Deployment Guide](../DEPLOYMENT-REPORT-V4.md)
+- [Apache Airflow Variables Documentation](https://airflow.apache.org/docs/apache-airflow/stable/howto/variable.html)
