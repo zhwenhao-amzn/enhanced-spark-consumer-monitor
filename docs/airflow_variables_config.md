@@ -1,19 +1,22 @@
 # Airflow Variables Configuration Guide
 
-This document provides the complete configuration guide for Airflow Variables required by the Enhanced Spark Consumer Monitor system.
+This document provides the complete configuration reference for Airflow Variables required by the Enhanced Spark Consumer Monitor system based on the `ConfigManager` class implementation.
 
 ## Overview
 
-The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configuration management. All variables are read through the `ConfigManager` class in `plugins/config_manager.py`.
+The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configuration management. All variables are read through the `ConfigManager` class in `plugins/config_manager.py` with built-in caching, error handling, and validation.
 
-## Required Variables
+## Variable Categories
 
-### Core Configuration Variables
+### Core Required Variables
+
+These variables are essential for the system to function and must be configured.
 
 #### `msk_broker_string` (Required)
 - **Type**: String (comma-separated)
 - **Description**: MSK broker endpoints for Kafka connection
 - **Format**: `host1:port,host2:port`
+- **Validation**: Checks for proper host:port format
 - **Example**: 
   ```
   b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
@@ -21,50 +24,51 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
 - **Notes**: Use port 9098 for IAM authentication, 9092 for SASL/PLAINTEXT
 
 #### `s3_checkpoint_paths` (Required)
-- **Type**: JSON Array
-- **Description**: List of S3 paths containing Spark checkpoint data
-- **Format**: `["s3://bucket/path1/", "s3://bucket/path2/"]`
+- **Type**: JSON Array or comma-separated string
+- **Description**: S3 paths containing Spark checkpoint data
+- **Format**: `["s3://bucket/path1/", "s3://bucket/path2/"]` or `s3://bucket/path1/,s3://bucket/path2/`
+- **Validation**: Each path must start with `s3://`
 - **Example**:
   ```json
   ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
   ```
-- **Notes**: Each path must start with `s3://` and end with `/`
 
 #### `kafka_topics` (Required)
-- **Type**: String (comma-separated) or JSON Array
+- **Type**: JSON Array or comma-separated string
 - **Description**: Kafka topics to monitor and commit offsets for
-- **Format**: `topic1,topic2` or `["topic1", "topic2"]`
+- **Format**: `["topic1", "topic2"]` or `topic1,topic2`
 - **Example**: 
   ```
   stockprice
   ```
-- **Notes**: Can be a single topic or multiple topics separated by commas
 
-### Consumer Group Mapping Variables
+### Consumer Group Configuration Variables
 
-#### `checkpoint_consumer_group_mapping` (Required)
+These variables control how topics are mapped to Kafka consumer groups.
+
+#### `checkpoint_consumer_group_mapping` (Optional but Recommended)
 - **Type**: JSON Object
-- **Description**: Maps S3 checkpoint paths to Kafka consumer groups
+- **Description**: Maps S3 checkpoint paths to specific consumer groups
 - **Format**: `{"s3://path/": "consumer-group"}`
+- **Fallback**: Uses topic-based mapping if not provided
 - **Example**:
   ```json
   {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
   ```
-- **Notes**: Each S3 path must match exactly with `s3_checkpoint_paths`
 
 #### `kafka_consumer_group_mapping` (Optional)
 - **Type**: JSON Object
-- **Description**: Maps Kafka topics to consumer groups (fallback mapping)
+- **Description**: Maps Kafka topics to consumer groups
 - **Format**: `{"topic": "consumer-group"}`
+- **Fallback**: Uses default consumer group for all topics
 - **Example**:
   ```json
   {"stockprice": "stockprice-monitor"}
   ```
-- **Notes**: Used when checkpoint-based mapping is not available
 
 #### `kafka_consumer_group` (Optional)
 - **Type**: String
-- **Description**: Default consumer group for all topics (fallback)
+- **Description**: Default consumer group for all topics
 - **Default**: `spark-checkpoint-monitor`
 - **Example**: 
   ```
@@ -73,19 +77,20 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
 
 ### IAM Authentication Variables
 
+These variables control MSK IAM authentication settings.
+
 #### `msk_use_iam_auth` (Optional)
-- **Type**: Boolean (as string)
+- **Type**: Boolean (as string or JSON boolean)
 - **Description**: Enable/disable IAM authentication for MSK
 - **Default**: `false`
 - **Example**: 
   ```
   true
   ```
-- **Notes**: Set to `true` to enable IAM authentication
 
 #### `aws_region` (Optional)
 - **Type**: String
-- **Description**: AWS region for IAM authentication and other AWS services
+- **Description**: AWS region for IAM authentication and AWS services
 - **Default**: `us-east-1`
 - **Example**: 
   ```
@@ -94,18 +99,20 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
 
 #### `msk_iam_role_arn` (Optional)
 - **Type**: String
-- **Description**: IAM role ARN for MSK authentication (if different from execution role)
+- **Description**: Specific IAM role ARN for MSK authentication
+- **Default**: Uses MWAA execution role
 - **Example**: 
   ```
   arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
   ```
-- **Notes**: Usually not needed as MWAA uses execution role by default
 
 ### Processing Configuration Variables
 
+These variables control retry logic, timeouts, and batch processing.
+
 #### `max_retries` (Optional)
-- **Type**: Integer
-- **Description**: Maximum number of retries for failed operations
+- **Type**: Integer (as string or number)
+- **Description**: Maximum retry attempts for failed operations
 - **Default**: `3`
 - **Example**: 
   ```
@@ -113,8 +120,8 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
   ```
 
 #### `retry_delay_seconds` (Optional)
-- **Type**: Integer
-- **Description**: Delay between retries in seconds
+- **Type**: Integer (as string or number)
+- **Description**: Delay between retry attempts in seconds
 - **Default**: `60`
 - **Example**: 
   ```
@@ -122,7 +129,7 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
   ```
 
 #### `batch_size` (Optional)
-- **Type**: Integer
+- **Type**: Integer (as string or number)
 - **Description**: Batch size for processing operations
 - **Default**: `100`
 - **Example**: 
@@ -131,38 +138,40 @@ The Enhanced Spark Consumer Monitor uses Airflow Variables for dynamic configura
   ```
 
 #### `timeout_seconds` (Optional)
-- **Type**: Integer
-- **Description**: Timeout for operations in seconds
+- **Type**: Integer (as string or number)
+- **Description**: Operation timeout in seconds
 - **Default**: `300`
 - **Example**: 
   ```
   300
   ```
 
-## Variable Format Guidelines
+## Variable Reading Logic
 
-### String Variables
-- Enter as plain text without quotes
-- No leading/trailing spaces
-- Case-sensitive
+The `ConfigManager` implements intelligent variable reading with the following priority:
 
-### JSON Variables
-- Must use valid JSON syntax
-- Use double quotes `"` not single quotes `'`
-- No trailing commas
-- Validate JSON before saving
-
-### Boolean Variables
-- Enter as string: `true` or `false`
-- Do not use checkbox/boolean input
-
-### Numeric Variables
-- Enter as plain numbers without quotes
-- Use integers for counts and timeouts
+1. **JSON Deserialization**: Attempts to parse as JSON first
+2. **String Fallback**: Falls back to string parsing if JSON fails
+3. **Default Values**: Uses configured defaults if variable is missing
+4. **Caching**: Caches values to improve performance
+5. **Error Handling**: Provides detailed error messages for troubleshooting
 
 ## Configuration Examples
 
-### Example 1: Single Topic Configuration
+### Example 1: Minimal Required Configuration
+
+```
+# Core Required Variables
+msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
+s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
+kafka_topics = stockprice
+
+# IAM Authentication
+msk_use_iam_auth = true
+aws_region = us-east-1
+```
+
+### Example 2: Complete Single Topic Configuration
 
 ```
 # Core Configuration
@@ -179,19 +188,20 @@ kafka_consumer_group = stockprice-monitor
 msk_use_iam_auth = true
 aws_region = us-east-1
 
-# Processing Configuration (Optional)
+# Processing Configuration
 max_retries = 3
 retry_delay_seconds = 60
+batch_size = 100
 timeout_seconds = 300
 ```
 
-### Example 2: Multiple Topics Configuration
+### Example 3: Multiple Topics Configuration
 
 ```
 # Core Configuration
 msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9098,b-1.cluster.kafka.us-east-1.amazonaws.com:9098
 s3_checkpoint_paths = ["s3://data-lake/checkpoints/stockprice/", "s3://data-lake/checkpoints/orderdata/"]
-kafka_topics = stockprice,orderdata
+kafka_topics = ["stockprice", "orderdata"]
 
 # Consumer Group Mapping
 checkpoint_consumer_group_mapping = {"s3://data-lake/checkpoints/stockprice/": "stock-monitor", "s3://data-lake/checkpoints/orderdata/": "order-monitor"}
@@ -202,34 +212,15 @@ msk_use_iam_auth = true
 aws_region = us-east-1
 ```
 
-### Example 3: JSON Array Topics Configuration
-
-```
-# Core Configuration
-msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9098,b-1.cluster.kafka.us-east-1.amazonaws.com:9098
-s3_checkpoint_paths = ["s3://analytics/spark-checkpoints/topic1/", "s3://analytics/spark-checkpoints/topic2/"]
-kafka_topics = ["topic1", "topic2", "topic3"]
-
-# Consumer Group Mapping
-checkpoint_consumer_group_mapping = {"s3://analytics/spark-checkpoints/topic1/": "analytics-group", "s3://analytics/spark-checkpoints/topic2/": "analytics-group"}
-kafka_consumer_group_mapping = {"topic1": "analytics-group", "topic2": "analytics-group", "topic3": "analytics-group"}
-kafka_consumer_group = analytics-group
-
-# IAM Authentication
-msk_use_iam_auth = true
-aws_region = us-west-2
-```
-
 ### Example 4: Non-IAM Configuration
 
 ```
 # Core Configuration (SASL/PLAINTEXT)
 msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9092,b-1.cluster.kafka.us-east-1.amazonaws.com:9092
-s3_checkpoint_paths = ["s3://legacy-data/checkpoints/events/"]
+s3_checkpoint_paths = s3://legacy-data/checkpoints/events/
 kafka_topics = events
 
-# Consumer Group Mapping
-checkpoint_consumer_group_mapping = {"s3://legacy-data/checkpoints/events/": "events-processor"}
+# Consumer Group Configuration
 kafka_consumer_group = events-processor
 
 # No IAM Authentication
@@ -237,69 +228,134 @@ msk_use_iam_auth = false
 aws_region = us-east-1
 ```
 
-## Configuration Validation
+### Example 5: Comma-Separated String Format
 
-The system validates configuration through the `validate_configuration()` method:
+```
+# Using comma-separated strings instead of JSON arrays
+msk_broker_string = broker1:9098,broker2:9098
+s3_checkpoint_paths = s3://bucket1/path1/,s3://bucket2/path2/
+kafka_topics = topic1,topic2,topic3
 
-```python
-validation_results = config_manager.validate_configuration()
+# Consumer group mapping still requires JSON
+kafka_consumer_group_mapping = {"topic1": "group1", "topic2": "group2", "topic3": "group3"}
 ```
 
-### Validation Checks:
-- ✅ MSK broker string format and connectivity
-- ✅ S3 checkpoint paths accessibility and format
-- ✅ Kafka topics configuration
-- ✅ Consumer group mappings consistency
-- ✅ IAM authentication settings
+## Variable Format Guidelines
+
+### String Variables
+- Enter as plain text without quotes
+- Comma-separated values supported for lists
+- Case-sensitive
+- No leading/trailing whitespace
+
+### JSON Variables
+- Must use valid JSON syntax
+- Use double quotes `"` not single quotes `'`
+- No trailing commas
+- Supports nested objects and arrays
+
+### Boolean Variables
+- Can be string: `"true"` or `"false"`
+- Can be JSON boolean: `true` or `false`
+- Case-insensitive for string format
+
+### Numeric Variables
+- Can be string: `"300"`
+- Can be number: `300`
+- Automatically converted to appropriate type
+
+## Configuration Validation
+
+The system performs comprehensive validation through `validate_configuration()`:
+
+### Validation Checks
+- ✅ **MSK Broker String**: Format validation and connectivity test
+- ✅ **S3 Checkpoint Paths**: Path format and accessibility verification
+- ✅ **Kafka Topics**: Topic existence and format validation
+- ✅ **Consumer Group Mappings**: Consistency and completeness checks
+- ✅ **IAM Authentication**: Configuration and permissions validation
+
+### Validation Results
+```python
+{
+    'msk_broker_string': True,
+    's3_checkpoint_paths': True,
+    'kafka_topics': True,
+    'consumer_group_mapping': True,
+    'checkpoint_consumer_group_mapping': True
+}
+```
 
 ## Troubleshooting
 
-### Common Issues
+### Common Configuration Errors
 
 #### "Expecting value: line 1 column 1 (char 0)"
 - **Cause**: Variable is empty or contains only whitespace
-- **Solution**: Ensure variable has a valid value
+- **Solution**: Ensure variable has a valid non-empty value
+- **Check**: Verify variable exists in Airflow Variables list
 
 #### "Extra data: line 1 column X (char Y)"
-- **Cause**: Invalid JSON format
-- **Solution**: Validate JSON syntax, check for trailing commas
+- **Cause**: Invalid JSON format (trailing commas, syntax errors)
+- **Solution**: Validate JSON syntax using online JSON validator
+- **Check**: Ensure proper quote usage and no trailing commas
 
-#### "Invalid S3 path format"
+#### "Invalid S3 path format: path"
 - **Cause**: S3 path doesn't start with `s3://`
-- **Solution**: Ensure all S3 paths use correct format
+- **Solution**: Ensure all S3 paths use format `s3://bucket/path/`
+- **Check**: Verify path accessibility and permissions
 
 #### "MSK broker string not configured"
 - **Cause**: `msk_broker_string` variable is missing or empty
-- **Solution**: Add valid broker string with host:port format
+- **Solution**: Add valid broker string with `host:port` format
+- **Check**: Verify broker endpoints and port numbers
 
-### Debug Commands
+#### "Required Airflow Variable 'variable_name' not found"
+- **Cause**: Required variable is not configured
+- **Solution**: Add the missing variable with appropriate value
+- **Check**: Review required variables list above
 
-```bash
-# List all variables
-aws mwaa create-cli-token --name your-environment --region us-east-1 | \
-  jq -r '.CliToken' | xargs -I {} curl -X POST \
-  "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
-  -H "Authorization: Bearer {}" -H "Content-Type: text/plain" \
-  -d "variables list"
+### Debug Information
 
-# Get specific variable
-aws mwaa create-cli-token --name your-environment --region us-east-1 | \
-  jq -r '.CliToken' | xargs -I {} curl -X POST \
-  "https://your-environment.airflow.amazonaws.com/aws_mwaa/cli" \
-  -H "Authorization: Bearer {}" -H "Content-Type: text/plain" \
-  -d "variables get kafka_topics"
+The system provides detailed logging for troubleshooting:
+
+```python
+# Enable debug logging to see variable resolution
+logger.setLevel(logging.DEBUG)
+
+# Check configuration validation results
+config_manager = ConfigManager()
+validation_results = config_manager.validate_configuration()
+print(validation_results)
+
+# Get complete configuration
+all_config = config_manager.get_all_config()
+print(all_config)
 ```
 
-## Security Considerations
+## Best Practices
 
-- **IAM Permissions**: Ensure MWAA execution role has necessary permissions for MSK, S3, and CloudWatch
-- **Network Access**: Verify security groups allow MWAA to access MSK brokers
-- **Encryption**: Use IAM authentication for secure MSK access
-- **Least Privilege**: Grant minimal required permissions
+### Configuration Management
+1. **Use JSON for Complex Data**: Prefer JSON arrays/objects over comma-separated strings
+2. **Validate Before Deployment**: Test configuration in development environment
+3. **Document Custom Values**: Maintain documentation for environment-specific settings
+4. **Use Descriptive Names**: Choose clear consumer group and topic names
+
+### Security Considerations
+1. **Enable IAM Authentication**: Use `msk_use_iam_auth = true` for production
+2. **Least Privilege**: Grant minimal required IAM permissions
+3. **Network Security**: Ensure proper security group configurations
+4. **Audit Access**: Monitor variable changes and access patterns
+
+### Performance Optimization
+1. **Configure Timeouts**: Set appropriate timeout values for your environment
+2. **Batch Processing**: Adjust batch sizes based on data volume
+3. **Retry Logic**: Configure retries based on expected failure patterns
+4. **Caching**: Leverage built-in variable caching for performance
 
 ## Related Documentation
 
 - [Enhanced Spark Consumer Monitor README](../README.md)
-- [IAM Authentication Guide](../README-IAM.md)
-- [Deployment Guide](../DEPLOYMENT-REPORT-V4.md)
+- [IAM Authentication Implementation Guide](../README-IAM.md)
+- [System Deployment Guide](../DEPLOYMENT-REPORT-V4.md)
 - [Apache Airflow Variables Documentation](https://airflow.apache.org/docs/apache-airflow/stable/howto/variable.html)
