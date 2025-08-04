@@ -41,7 +41,7 @@ stockprice
 
 ### Consumer Group Configuration
 
-#### `checkpoint_consumer_group_mapping` (Optional but Recommended)
+#### `checkpoint_consumer_group_mapping` (Required)
 **Type**: JSON Object  
 **Description**: Maps S3 checkpoint paths to specific consumer groups  
 **Format**: `{"s3://path/": "consumer-group"}`  
@@ -49,9 +49,8 @@ stockprice
 ```json
 {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
 ```
-**Fallback**: Uses topic-based mapping if not provided
 
-#### `kafka_consumer_group_mapping` (Optional)
+#### `kafka_consumer_group_mapping` (Required)
 **Type**: JSON Object  
 **Description**: Maps Kafka topics to consumer groups  
 **Format**: `{"topic": "consumer-group"}`  
@@ -59,12 +58,10 @@ stockprice
 ```json
 {"stockprice": "stockprice-monitor"}
 ```
-**Fallback**: Uses default consumer group for all topics
 
-#### `kafka_consumer_group` (Optional)
+#### `kafka_consumer_group` (Required)
 **Type**: String  
 **Description**: Default consumer group for all topics  
-**Default**: `spark-checkpoint-monitor`  
 **Example**: 
 ```
 stockprice-monitor
@@ -72,28 +69,25 @@ stockprice-monitor
 
 ### IAM Authentication
 
-#### `msk_use_iam_auth` (Optional)
+#### `msk_use_iam_auth` (Required)
 **Type**: Boolean (as string or JSON boolean)  
 **Description**: Enable/disable IAM authentication for MSK  
-**Default**: `false`  
 **Example**: 
 ```
 true
 ```
 
-#### `aws_region` (Optional)
+#### `aws_region` (Required)
 **Type**: String  
 **Description**: AWS region for IAM authentication and AWS services  
-**Default**: `us-east-1`  
 **Example**: 
 ```
 us-east-1
 ```
 
-#### `msk_iam_role_arn` (Optional)
+#### `msk_iam_role_arn` (Required)
 **Type**: String  
 **Description**: Specific IAM role ARN for MSK authentication  
-**Default**: Uses MWAA execution role  
 **Example**: 
 ```
 arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
@@ -101,28 +95,24 @@ arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-Executio
 
 ### Processing Configuration
 
-#### `max_retries` (Optional)
+#### `max_retries` (Required)
 **Type**: Integer  
 **Description**: Maximum retry attempts for failed operations  
-**Default**: `3`  
 **Example**: `3`
 
-#### `retry_delay_seconds` (Optional)
+#### `retry_delay_seconds` (Required)
 **Type**: Integer  
 **Description**: Delay between retry attempts in seconds  
-**Default**: `60`  
 **Example**: `60`
 
-#### `batch_size` (Optional)
+#### `batch_size` (Required)
 **Type**: Integer  
 **Description**: Batch size for processing operations  
-**Default**: `100`  
 **Example**: `100`
 
-#### `timeout_seconds` (Optional)
+#### `timeout_seconds` (Required)
 **Type**: Integer  
 **Description**: Operation timeout in seconds  
-**Default**: `300`  
 **Example**: `300`
 
 ## Configuration Examples
@@ -132,11 +122,19 @@ arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-Executio
 msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
 s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
 kafka_topics = stockprice
+checkpoint_consumer_group_mapping = {"s3://zhwenhaodatalake/checkpoints/stockprice/offsets/": "stockprice-monitor"}
+kafka_consumer_group_mapping = {"stockprice": "stockprice-monitor"}
+kafka_consumer_group = stockprice-monitor
 msk_use_iam_auth = true
 aws_region = us-east-1
+msk_iam_role_arn = arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
+max_retries = 3
+retry_delay_seconds = 60
+batch_size = 100
+timeout_seconds = 300
 ```
 
-### Example 2: Complete Single Topic Configuration
+### Example 2: Single Topic Configuration
 ```
 msk_broker_string = b-2.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098,b-1.zhwenhaomskiam.v1x1ro.c7.kafka.us-east-1.amazonaws.com:9098
 s3_checkpoint_paths = ["s3://zhwenhaodatalake/checkpoints/stockprice/offsets/"]
@@ -146,6 +144,7 @@ kafka_consumer_group_mapping = {"stockprice": "stockprice-monitor"}
 kafka_consumer_group = stockprice-monitor
 msk_use_iam_auth = true
 aws_region = us-east-1
+msk_iam_role_arn = arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
 max_retries = 3
 retry_delay_seconds = 60
 batch_size = 100
@@ -159,8 +158,14 @@ s3_checkpoint_paths = ["s3://data-lake/checkpoints/stockprice/", "s3://data-lake
 kafka_topics = ["stockprice", "orderdata"]
 checkpoint_consumer_group_mapping = {"s3://data-lake/checkpoints/stockprice/": "stock-monitor", "s3://data-lake/checkpoints/orderdata/": "order-monitor"}
 kafka_consumer_group_mapping = {"stockprice": "stock-monitor", "orderdata": "order-monitor"}
+kafka_consumer_group = analytics-group
 msk_use_iam_auth = true
 aws_region = us-east-1
+msk_iam_role_arn = arn:aws:iam::104172191111:role/service-role/AmazonMWAA-ExecutionRole
+max_retries = 3
+retry_delay_seconds = 60
+batch_size = 100
+timeout_seconds = 300
 ```
 
 ### Example 4: Non-IAM Configuration
@@ -168,9 +173,16 @@ aws_region = us-east-1
 msk_broker_string = b-2.cluster.kafka.us-east-1.amazonaws.com:9092,b-1.cluster.kafka.us-east-1.amazonaws.com:9092
 s3_checkpoint_paths = s3://legacy-data/checkpoints/events/
 kafka_topics = events
+checkpoint_consumer_group_mapping = {"s3://legacy-data/checkpoints/events/": "events-processor"}
+kafka_consumer_group_mapping = {"events": "events-processor"}
 kafka_consumer_group = events-processor
 msk_use_iam_auth = false
 aws_region = us-east-1
+msk_iam_role_arn = arn:aws:iam::104172191111:role/service-role/AmazonMWAA-ExecutionRole
+max_retries = 3
+retry_delay_seconds = 60
+batch_size = 100
+timeout_seconds = 300
 ```
 
 ### Example 5: Comma-Separated Format
@@ -178,7 +190,16 @@ aws_region = us-east-1
 msk_broker_string = broker1:9098,broker2:9098
 s3_checkpoint_paths = s3://bucket1/path1/,s3://bucket2/path2/
 kafka_topics = topic1,topic2,topic3
+checkpoint_consumer_group_mapping = {"s3://bucket1/path1/": "group1", "s3://bucket2/path2/": "group2"}
 kafka_consumer_group_mapping = {"topic1": "group1", "topic2": "group2", "topic3": "group3"}
+kafka_consumer_group = default-group
+msk_use_iam_auth = true
+aws_region = us-west-2
+msk_iam_role_arn = arn:aws:iam::104172191111:role/service-role/AmazonMWAA-ExecutionRole
+max_retries = 3
+retry_delay_seconds = 60
+batch_size = 100
+timeout_seconds = 300
 ```
 
 ## Variable Format Guidelines
