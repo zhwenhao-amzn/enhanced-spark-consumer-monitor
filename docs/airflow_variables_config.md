@@ -85,13 +85,6 @@ true
 us-east-1
 ```
 
-#### `msk_iam_role_arn` (Required)
-**Type**: String  
-**Description**: Specific IAM role ARN for MSK authentication  
-**Example**: 
-```
-arn:aws:iam::104172191111:role/service-role/AmazonMWAA-zhwenhao-mwaa-v4-ExecutionRole
-```
 
 ### Processing Configuration
 
