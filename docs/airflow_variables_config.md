@@ -59,14 +59,6 @@ stockprice
 {"stockprice": "stockprice-monitor"}
 ```
 
-#### `kafka_consumer_group` (Required)
-**Type**: String  
-**Description**: Default consumer group for all topics  
-**Example**: 
-```
-stockprice-monitor
-```
-
 ### IAM Authentication
 
 #### `msk_use_iam_auth` (Required)
